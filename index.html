@@ -137,8 +137,13 @@ html,body{width:100%;min-height:100vh;background:var(--bg);color:var(--text);fon
 
 /* ── COACH INSIGHT BOX ── */
 .coach-insight{background:var(--surface2);border:1px solid rgba(0,201,167,0.25);border-radius:var(--radius);padding:16px;margin:0 20px 4px}
-.coach-insight-title{font-family:'Barlow Condensed',sans-serif;font-size:14px;letter-spacing:3px;color:var(--teal);font-weight:700;margin-bottom:8px}
-.coach-insight-text{font-size:13px;color:var(--muted);line-height:1.6}
+.coach-insight-title{font-family:'Barlow Condensed',sans-serif;font-size:11px;letter-spacing:3px;color:var(--teal);font-weight:700;margin-bottom:10px;text-transform:uppercase}
+.coach-insight-summary{font-size:13px;color:var(--text);line-height:1.6;font-weight:500}
+.insight-divider{height:1px;background:rgba(255,255,255,0.07);margin:12px 0}
+.insight-skill-row{margin-bottom:10px}
+.insight-skill-row:last-child{margin-bottom:0}
+.insight-skill-label{font-family:'Barlow Condensed',sans-serif;font-size:13px;font-weight:800;letter-spacing:1px;margin-bottom:3px;text-transform:uppercase}
+.insight-skill-reason{font-size:13px;color:var(--muted);line-height:1.55}
 
 /* ── TIMELINE ── */
 .timeline{padding:6px 20px 110px}
@@ -422,16 +427,6 @@ const COOLDOWNS = [
   { name:'Cool-Down Walk + Breathing', emoji:'😮‍💨', yt:'cool down breathing exercise basketball', desc:'Slow walk around the court x2 while taking deep breaths. Then stretch hips, hamstrings, and shoulders for remaining time.', cue:'Breathe out longer than you breathe in. Slows your heart rate faster.' },
 ];
 
-// Keyword → skill mapping for coach mode
-const KEYWORD_MAP = {
-  dribbling: ['dribble','dribbling','ball','handle','handles','bouncing','crossover','between legs','behind back','looking down','head down','too high','palming'],
-  finishing: ['layup','layups','finish','finishing','footwork','steps','1-2','euro','mikan','rim','backboard','gather','under basket','close range'],
-  shooting: ['shoot','shooting','shot','jumper','form','elbow','follow through','free throw','three','3 point','missed','arc','release'],
-  passing: ['pass','passing','throws','chest pass','bounce pass','turnover','vision','teammates','find open'],
-  defense: ['defense','defensive','stance','slide','guard','closeout','feet','position','beat off dribble','too slow on defense'],
-  athleticism: ['tired','slow','stamina','speed','quickness','agile','agility','jump','explosion','conditioning','endurance','fatigue','lazy feet'],
-};
-
 const TITLES = ['LOCKED IN','GRIND TIME','LEVEL UP','NO DAYS OFF','PUT IN WORK','STAY READY','BUILT DIFFERENT','ON A MISSION','NEXT LEVEL','BEAST MODE'];
 const SUBS = ['Every rep counts. Make them all matter.','Champions are built in sessions like this.','Focus up. This is your time.','Do the work no one else will.','One drill at a time. One rep at a time.'];
 
@@ -614,7 +609,7 @@ function generateInsight(text, skills, dur) {
 // ══════════════════════════════════════════
 // RENDER SESSION
 // ══════════════════════════════════════════
-function renderSession(phases, dur, age, picks, isCoach, insightText) {
+function renderSession(phases, dur, age, picks, isCoach, insightText, reasons) {
   // Header
   const header = document.getElementById('sched-header');
   header.className = `sched-header${isCoach ? ' coach-header' : ''}`;
@@ -633,7 +628,21 @@ function renderSession(phases, dur, age, picks, isCoach, insightText) {
   // Coach insight
   const insightWrap = document.getElementById('coach-insight-wrap');
   if (isCoach && insightText) {
-    insightWrap.innerHTML = `<div class="coach-insight"><div class="coach-insight-title">🧠 COACH ANALYSIS</div><div class="coach-insight-text">${insightText}</div></div>`;
+    const reasonsHtml = (reasons && picks.length) ? picks.map(skill => {
+      const r = reasons[skill];
+      if (!r) return '';
+      const color = DB[skill]?.color || 'var(--teal)';
+      return `<div class="insight-skill-row">
+        <div class="insight-skill-label" style="color:${color}">${skillEmoji(skill)} ${cap(skill)}</div>
+        <div class="insight-skill-reason">${r}</div>
+      </div>`;
+    }).join('') : '';
+
+    insightWrap.innerHTML = `<div class="coach-insight">
+      <div class="coach-insight-title">🧠 COACH ANALYSIS</div>
+      <div class="coach-insight-summary">${insightText}</div>
+      ${reasonsHtml ? `<div class="insight-divider"></div>${reasonsHtml}` : ''}
+    </div>`;
   } else {
     insightWrap.innerHTML = '';
   }
@@ -726,6 +735,227 @@ function buildStandardSession() {
 }
 
 // ══════════════════════════════════════════
+// SMART LOCAL COACH ANALYSIS ENGINE
+// Extracts actual phrases from commentary and
+// builds personalised coach-voice feedback
+// ══════════════════════════════════════════
+
+const SKILL_SIGNALS = {
+  dribbling: {
+    patterns: [
+      { match: /look(s|ing)?\s*(down|at\s*the\s*ball)/i, extract: (m,t) => extractPhrase(t, m, 6), label: 'eyes down while dribbling' },
+      { match: /dribbl(e|es|ing)\s*(too\s*)?(high|up)/i, extract: (m,t) => extractPhrase(t, m, 6), label: 'dribbling too high' },
+      { match: /can'?t\s*(dribble|handle|control)/i, extract: (m,t) => extractPhrase(t, m, 6), label: 'struggles to control the ball' },
+      { match: /los(e|es|ing)\s*(the\s*)?ball/i, extract: (m,t) => extractPhrase(t, m, 5), label: 'losing the ball' },
+      { match: /weak\s*(hand|side|left|right)/i, extract: (m,t) => extractPhrase(t, m, 5), label: 'weak hand issues' },
+      { match: /dribbl/i, extract: (m,t) => extractPhrase(t, m, 5), label: 'dribbling' },
+      { match: /ball\s*control/i, extract: (m,t) => extractPhrase(t, m, 5), label: 'ball control' },
+      { match: /crossover/i, extract: (m,t) => extractPhrase(t, m, 5), label: 'crossover' },
+      { match: /palming/i, extract: (m,t) => extractPhrase(t, m, 4), label: 'palming the ball' },
+      { match: /bouncing\s*(too\s*)?(high|hard)/i, extract: (m,t) => extractPhrase(t, m, 5), label: 'high bouncing' },
+    ],
+    coachReasons: {
+      'eyes down while dribbling': 'Keeping his head down means he can\'t see the court. The dribbling drills here specifically train eyes-up habits — they\'ll force him to feel the ball rather than watch it.',
+      'dribbling too high': 'A high dribble is easy to steal and slows everything down. These low pound and control drills will build the muscle memory to keep the ball below the knee.',
+      'struggles to control the ball': 'Ball control comes from repetition at low speed first. These drills start stationary and progressive — building the hand-eye connection he\'s missing.',
+      'losing the ball': 'Turnovers from losing the ball usually mean the handle isn\'t automatic yet. These drills drill control until it\'s second nature.',
+      'weak hand issues': 'A weak off-hand is a massive limitation. These drills isolate the weak hand specifically and build equal confidence on both sides.',
+      'dribbling': 'These dribbling drills develop the core ball-handling skills and build tight, controlled handle through repetition.',
+      'ball control': 'Ball control is built through deliberate touch drills. These exercises develop the fingertip sensitivity and muscle memory needed.',
+      'crossover': 'A sharp crossover is about timing and low ball position. These drills break down the mechanics and build it from the ground up.',
+      'palming the ball': 'Palming creates bad habits and slows the handle. Fingertip dribble drills here retrain the touch with correct hand position.',
+      'high bouncing': 'High bouncing makes the ball easy to steal. Low pound drills here specifically train keeping the dribble below the knee.',
+    }
+  },
+  finishing: {
+    patterns: [
+      { match: /layup(s)?/i, extract: (m,t) => extractPhrase(t, m, 6), label: 'layup problems' },
+      { match: /foot(work)?(\s*(is|are|was))?\s*(off|sloppy|wrong|bad|messy)/i, extract: (m,t) => extractPhrase(t, m, 7), label: 'sloppy footwork' },
+      { match: /miss(es|ing)?\s*(at|around|near|under)?\s*(the\s*)?(basket|rim|hoop)/i, extract: (m,t) => extractPhrase(t, m, 7), label: 'missing close shots' },
+      { match: /wrong\s*(hand|foot|side)/i, extract: (m,t) => extractPhrase(t, m, 5), label: 'wrong hand/foot at basket' },
+      { match: /finish(es|ing)?/i, extract: (m,t) => extractPhrase(t, m, 5), label: 'finishing issues' },
+      { match: /(1-2|one.two)\s*step/i, extract: (m,t) => extractPhrase(t, m, 6), label: 'footwork steps' },
+      { match: /gather/i, extract: (m,t) => extractPhrase(t, m, 5), label: 'gather step' },
+      { match: /backboard/i, extract: (m,t) => extractPhrase(t, m, 5), label: 'not using backboard' },
+    ],
+    coachReasons: {
+      'layup problems': 'Layup issues at this age are almost always a footwork problem, not a shooting problem. The drills here isolate the 1-2 step at slow speed before adding any pace.',
+      'sloppy footwork': 'Sloppy footwork around the basket leads to travels, missed layups, and easy blocks. These drills walk through the correct gather and step pattern until it becomes automatic.',
+      'missing close shots': 'Missing near the basket usually means the approach angle or gather is off. The Mikan drill and slow-motion layup work here fix the mechanics right at the rim.',
+      'wrong hand/foot at basket': 'Using the wrong hand or foot is a very common habit at this age. These drills drill the right-hand-right-side, left-hand-left-side rule with repetition on both sides.',
+      'finishing issues': 'Finishing at the rim requires correct footwork, soft touch, and composure. These drills build all three progressively from slow to full speed.',
+      'footwork steps': 'The 1-2 step is foundational. These drills isolate each step individually, with coaches saying "ONE — TWO" aloud on every rep until it\'s automatic.',
+      'gather step': 'A poor gather leads to travels and awkward finishes. Power layup drills here specifically isolate the gather step before adding any movement.',
+      'not using backboard': 'The backboard is the easiest target at the rim. Mikan drill repetitions here build the habit of using the glass on every close finish.',
+    }
+  },
+  shooting: {
+    patterns: [
+      { match: /shoot(s|ing)?\s*(too\s*)?(flat|low|wild|off)/i, extract: (m,t) => extractPhrase(t, m, 6), label: 'shooting mechanics off' },
+      { match: /elbow\s*(out|flaring|wrong)/i, extract: (m,t) => extractPhrase(t, m, 5), label: 'elbow flaring out' },
+      { match: /no\s*(follow.through|release)/i, extract: (m,t) => extractPhrase(t, m, 5), label: 'no follow-through' },
+      { match: /miss(es|ing)?\s*(shot|jumper|free throw|3)/i, extract: (m,t) => extractPhrase(t, m, 6), label: 'missing shots' },
+      { match: /inconsistent\s*shot/i, extract: (m,t) => extractPhrase(t, m, 5), label: 'inconsistent shooting' },
+      { match: /free\s*throw/i, extract: (m,t) => extractPhrase(t, m, 5), label: 'free throws' },
+      { match: /shoot/i, extract: (m,t) => extractPhrase(t, m, 5), label: 'shooting' },
+      { match: /form/i, extract: (m,t) => extractPhrase(t, m, 5), label: 'shooting form' },
+    ],
+    coachReasons: {
+      'shooting mechanics off': 'When the shot looks off, it\'s usually one of the four BEEF fundamentals breaking down. These form shooting drills reset the mechanics piece by piece from close range.',
+      'elbow flaring out': 'A flared elbow pushes the ball sideways on release. The BEEF Check drill here isolates elbow alignment specifically and rewires the muscle memory.',
+      'no follow-through': 'No follow-through means no backspin and inconsistent direction. These drills make holding the follow-through non-negotiable on every single rep.',
+      'missing shots': 'Missed shots at youth level are usually form-related, not distance-related. Starting with close-range form shooting and working out from there fixes the root cause.',
+      'inconsistent shooting': 'Inconsistency means the shot has no routine yet. These drills build a repeatable pre-shot routine and consistent release point.',
+      'free throws': 'Free throws are all about routine and repetition. These drills build a consistent pre-shot routine that the body can replicate under pressure.',
+      'shooting': 'These shooting drills build proper mechanics and shooting touch through progressive, structured repetition.',
+      'shooting form': 'Good shooting form starts with BEEF — Balance, Eyes, Elbow, Follow-through. These drills teach and reinforce each component.',
+    }
+  },
+  passing: {
+    patterns: [
+      { match: /turnover(s)?/i, extract: (m,t) => extractPhrase(t, m, 5), label: 'turnovers' },
+      { match: /can'?t\s*(find|see|spot)\s*(open|teammate)/i, extract: (m,t) => extractPhrase(t, m, 7), label: 'can\'t find open teammates' },
+      { match: /bad\s*pass/i, extract: (m,t) => extractPhrase(t, m, 5), label: 'bad passes' },
+      { match: /pass(es|ing)?\s*(too\s*)?(hard|soft|wild|off)/i, extract: (m,t) => extractPhrase(t, m, 6), label: 'inaccurate passing' },
+      { match: /doesn'?t\s*pass/i, extract: (m,t) => extractPhrase(t, m, 5), label: 'not passing enough' },
+      { match: /vision/i, extract: (m,t) => extractPhrase(t, m, 5), label: 'court vision' },
+      { match: /pass/i, extract: (m,t) => extractPhrase(t, m, 4), label: 'passing' },
+    ],
+    coachReasons: {
+      'turnovers': 'Turnovers from bad passes usually mean the pass isn\'t purposeful or accurate enough. Wall passing drills build the crisp, intentional pass-and-move habit that eliminates lazy throws.',
+      'can\'t find open teammates': 'Court vision is trainable. These passing drills include movement after every pass, which builds the habit of scanning the court rather than staring at the ball.',
+      'bad passes': 'Inaccurate passing comes from throwing with arms only and not stepping into the pass. These wall drills lock in the step-and-push mechanics on every repetition.',
+      'inaccurate passing': 'Pass accuracy is about technique and intent. These wall drills build the correct release point and stepping motion for chest and bounce passes.',
+      'not passing enough': 'Not passing enough is often a confidence issue — he doesn\'t trust his pass. These drills build pass accuracy and the habit of moving after every pass.',
+      'court vision': 'Court vision is built by training the habit of looking up before and after receiving the ball. Pass-and-move drills here specifically build that scanning habit.',
+      'passing': 'These passing drills build crisp, accurate passing technique and the pass-then-move habit that makes good passers dangerous.',
+    }
+  },
+  defense: {
+    patterns: [
+      { match: /get(s|ting)?\s*beat/i, extract: (m,t) => extractPhrase(t, m, 6), label: 'getting beat off the dribble' },
+      { match: /stand(s|ing)?\s*(up|straight)/i, extract: (m,t) => extractPhrase(t, m, 5), label: 'standing up on defense' },
+      { match: /defense\s*(is|was)?\s*(lazy|bad|poor|weak|slow)/i, extract: (m,t) => extractPhrase(t, m, 6), label: 'lazy defense' },
+      { match: /feet\s*(not\s*)?(moving|slow|lazy|stuck)/i, extract: (m,t) => extractPhrase(t, m, 6), label: 'feet not moving on defense' },
+      { match: /reach(es|ing)?\s*(in|for)/i, extract: (m,t) => extractPhrase(t, m, 5), label: 'reaching in' },
+      { match: /defensive\s*stance/i, extract: (m,t) => extractPhrase(t, m, 5), label: 'defensive stance' },
+      { match: /defense/i, extract: (m,t) => extractPhrase(t, m, 5), label: 'defense' },
+    ],
+    coachReasons: {
+      'getting beat off the dribble': 'Getting beaten off the dribble means either the stance is too high or the feet aren\'t moving quickly enough. Slide drills and mirror drills here fix both.',
+      'standing up on defense': 'Standing up on defense makes it impossible to move laterally. These stance drills make a low, wide defensive position automatic and natural.',
+      'lazy defense': 'Lazy defense is often a habit issue — he doesn\'t know what active defense should feel like yet. These drills make intensity and low stance the default.',
+      'feet not moving on defense': 'Feet sticking on defense is fixed by slide drills done at full effort. These lateral movement drills train the quick, short steps that keep him in front.',
+      'reaching in': 'Reaching in means feet aren\'t positioned to stay in front — the reach is a last resort. Stance and slide drills fix the position so reaching isn\'t needed.',
+      'defensive stance': 'Proper defensive stance — wide feet, low hips, active hands — is the foundation of all defense. These drills build that position until it becomes instinct.',
+      'defense': 'These defensive drills build the stance, footwork, and positioning fundamentals that make a reliable defender.',
+    }
+  },
+  athleticism: {
+    patterns: [
+      { match: /tir(e|es|ed|ing)\s*(quickly|fast|out|easily)/i, extract: (m,t) => extractPhrase(t, m, 6), label: 'tires quickly' },
+      { match: /slow\s*(on\s*(his\s*)?(feet|court)|laterally|overall)/i, extract: (m,t) => extractPhrase(t, m, 6), label: 'slow feet' },
+      { match: /los(e|es|ing)\s*(focus|energy|steam)\s*(in\s*(the\s*)?(second|2nd))/i, extract: (m,t) => extractPhrase(t, m, 8), label: 'fades in second half' },
+      { match: /not\s*(explosive|quick|fast)/i, extract: (m,t) => extractPhrase(t, m, 5), label: 'lacks explosiveness' },
+      { match: /lazy\s*feet/i, extract: (m,t) => extractPhrase(t, m, 5), label: 'lazy feet' },
+      { match: /stam(ina|ina)/i, extract: (m,t) => extractPhrase(t, m, 5), label: 'stamina' },
+      { match: /quickness/i, extract: (m,t) => extractPhrase(t, m, 5), label: 'quickness' },
+      { match: /tired|fatigue/i, extract: (m,t) => extractPhrase(t, m, 5), label: 'conditioning' },
+    ],
+    coachReasons: {
+      'tires quickly': 'Tiring quickly means conditioning needs work. The athleticism drills here mix stamina work with basketball-specific movement so fitness and skill improve together.',
+      'slow feet': 'Slow feet on the court is directly trainable. Ladder drills and lateral quickness work here specifically target the foot speed and reaction time he needs.',
+      'fades in second half': 'Fading late in games is a conditioning issue. These drills build basketball-specific endurance so he can maintain intensity from start to finish.',
+      'lacks explosiveness': 'Explosiveness is built through plyometric and reactive drills. Broad jumps, dot drills, and lateral sprints here develop the fast-twitch movement patterns he\'s missing.',
+      'lazy feet': 'Lazy feet usually means the habit of staying low and active hasn\'t been drilled enough. These agility drills make light, quick footwork the default.',
+      'stamina': 'Basketball stamina is built through intervals and sport-specific conditioning. These drills mimic the stop-start intensity of a real game.',
+      'quickness': 'Quickness comes from training fast-twitch reactions. Agility ladders and dot drills here train the nervous system to fire faster.',
+      'conditioning': 'Better conditioning means better basketball in the second half of every game. These drills build the endurance base specific to basketball movement.',
+    }
+  }
+};
+
+// Extract a natural phrase from text around a match
+function extractPhrase(text, match, wordWindow) {
+  const idx = text.toLowerCase().indexOf(match[0].toLowerCase());
+  if (idx === -1) return match[0];
+  const words = text.split(/\s+/);
+  let charCount = 0;
+  let startWord = 0;
+  for (let i = 0; i < words.length; i++) {
+    if (charCount + words[i].length >= idx) { startWord = i; break; }
+    charCount += words[i].length + 1;
+  }
+  const half = Math.floor(wordWindow / 2);
+  const from = Math.max(0, startWord - half);
+  const to = Math.min(words.length, startWord + wordWindow - half);
+  return words.slice(from, to).join(' ').replace(/[.!?,;]+$/, '');
+}
+
+// Main analysis function — returns { picks, summary, reasons }
+function analyseCommentaryLocal(text, max) {
+  const results = {};
+
+  // Score each skill
+  Object.entries(SKILL_SIGNALS).forEach(([skill, cfg]) => {
+    for (const pattern of cfg.patterns) {
+      const m = text.match(pattern.match);
+      if (m) {
+        if (!results[skill]) results[skill] = [];
+        results[skill].push({ label: pattern.label, phrase: extractPhrase(text, m, 7) });
+        break; // one match per skill is enough to flag it
+      }
+    }
+  });
+
+  // Pick top skills by number of signals, break ties by pattern order
+  const allSkills = Object.keys(SKILL_SIGNALS);
+  const scored = allSkills.map(s => ({ skill: s, hits: (results[s] || []).length }));
+  scored.sort((a, b) => b.hits - a.hits);
+  const picks = scored.filter(s => s.hits > 0).slice(0, max).map(s => s.skill);
+
+  // If we don't have enough, fill with any skill mentioned loosely
+  if (picks.length < max) {
+    const lower = text.toLowerCase();
+    const loose = allSkills.filter(s => !picks.includes(s) && lower.includes(s));
+    picks.push(...loose.slice(0, max - picks.length));
+  }
+
+  // Final fallback
+  if (!picks.length) picks.push('dribbling');
+  if (picks.length < max && !picks.includes('athleticism')) picks.push('athleticism');
+  const finalPicks = picks.slice(0, max);
+
+  // Build coach-voice summary referencing actual text phrases
+  const foundPhrases = finalPicks.flatMap(skill => (results[skill] || []).map(r => `"${r.phrase}"`));
+  let summary = '';
+  if (foundPhrases.length > 0) {
+    summary = `Looking at your notes — you mentioned ${foundPhrases.slice(0, 2).join(' and ')}. `;
+  } else {
+    summary = `Based on what you described, `;
+  }
+  const skillNames = finalPicks.map(s => cap(s)).join(' and ');
+  summary += `I've focused this session on ${skillNames}. `;
+  summary += finalPicks.length === 1
+    ? `All drills target the specific issue you flagged, with age-appropriate progressions for ${AGE_LABELS[state.coach.age]}.`
+    : `These are the areas your notes point to most clearly, and all drills are matched to the ${AGE_LABELS[state.coach.age]} age group.`;
+
+  // Build per-skill reasons referencing actual phrases
+  const reasons = {};
+  finalPicks.forEach(skill => {
+    const hits = results[skill] || [];
+    const label = hits.length > 0 ? hits[0].label : skill;
+    const phrase = hits.length > 0 ? hits[0].phrase : null;
+    const template = SKILL_SIGNALS[skill].coachReasons[label] || SKILL_SIGNALS[skill].coachReasons[skill] || '';
+    reasons[skill] = phrase
+      ? `You noted "${phrase}" — ${template.charAt(0).toLowerCase() + template.slice(1)}`
+      : template;
+  });
+
+  return { picks: finalPicks, summary, reasons };
+}
+
+// ══════════════════════════════════════════
 // BUILD COACH SESSION
 // ══════════════════════════════════════════
 function buildCoachSession() {
@@ -740,19 +970,13 @@ function buildCoachSession() {
 
   setTimeout(() => {
     const max = c.dur === 30 ? 2 : 3;
-    let detectedSkills = analyseCommentary(c.text);
-
-    // Fallback if nothing detected
-    if (!detectedSkills.length) detectedSkills = ['dribbling', 'athleticism'];
-    const picks = detectedSkills.slice(0, max);
+    const { picks, summary, reasons } = analyseCommentaryLocal(c.text, max);
 
     const warmupMins = c.dur === 30 ? 3 : 5;
     const cooldownMins = c.dur === 30 ? 2 : 4;
     const workTime = c.dur - warmupMins - cooldownMins;
     const perSkill = Math.floor(workTime / picks.length);
     const extra = workTime - perSkill * picks.length;
-
-    const insightText = generateInsight(c.text, picks, c.dur);
 
     const phases = [];
     phases.push({ phase:'WARM-UP', color:'#3ECF8E', minutes: warmupMins, drills: getWarmup(c.age, warmupMins) });
@@ -761,29 +985,15 @@ function buildCoachSession() {
       const mins = perSkill + (i === 0 ? extra : 0);
       const pool = getAgeDrills(skill, c.age);
       const rawDrills = pickDrills(pool.length ? pool : DB[skill].drills, mins);
-      // Add "why" explanation
-      const why = getWhyText(skill, c.text);
+      const why = reasons[skill] || '';
       const drills = rawDrills.map(d => ({ ...d, why }));
       phases.push({ phase: skill.toUpperCase(), color: DB[skill].color, minutes: mins, drills });
     });
 
     phases.push({ phase:'COOL-DOWN', color:'#4B9EFF', minutes: cooldownMins, drills: getCooldown(cooldownMins) });
 
-    renderSession(phases, c.dur, c.age, picks, true, insightText);
-  }, 900);
-}
-
-function getWhyText(skill, text) {
-  const lower = text.toLowerCase();
-  const whyMap = {
-    dribbling: 'Selected because your notes mention ball-handling issues. These drills build tighter control and break the habit of looking down at the ball.',
-    finishing: 'Selected because your notes flag finishing or footwork problems. These drills isolate the 1-2 step pattern and build muscle memory at the basket.',
-    shooting: 'Selected because your notes mention shooting problems. These drills reinforce proper form and consistent mechanics.',
-    passing: 'Selected because your notes reference passing or vision issues. These drills build accuracy and decision-making habits.',
-    defense: 'Selected because your notes mention defensive issues. These drills build the stance and footwork foundation for solid on-ball defense.',
-    athleticism: 'Selected because your notes suggest conditioning or speed concerns. These drills improve quickness, endurance, and explosive movement.',
-  };
-  return whyMap[skill] || '';
+    renderSession(phases, c.dur, c.age, picks, true, summary, reasons);
+  }, 700);
 }
 
 // Init
